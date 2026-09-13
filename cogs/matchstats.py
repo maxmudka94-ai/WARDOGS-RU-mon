@@ -306,7 +306,7 @@ class MatchStats(commands.Cog):
         self._started = True
         if self.enabled:
             self.check_loop.start()
-            await self._ensure_placeholder()
+            self.bot.loop.create_task(self._placeholder_later())
         log.info(
             "MatchStats: %s, опрос каждые %s с, канал %s, топ-%s",
             "включён" if self.enabled else "выключен",
@@ -314,6 +314,17 @@ class MatchStats(commands.Cog):
             self.channel_id or "—",
             self.top_players,
         )
+
+    async def _placeholder_later(self):
+        """Заглушка создаётся ПОСЛЕ сводки мониторинга — чтобы на свежем канале
+        мониторинг был первым (вверху), а итоги матча — вторыми (снизу)."""
+        await asyncio.sleep(8)
+        wardogs = self.bot.get_cog("Wardogs")
+        for _ in range(12):
+            if wardogs is None or wardogs._summary_message_id is not None:
+                break
+            await asyncio.sleep(2)
+        await self._ensure_placeholder()
 
     async def cog_unload(self):
         self.check_loop.cancel()
