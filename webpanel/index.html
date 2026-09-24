@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WARDOGS // Панель управления</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app" v-cloak>
+
+  <!-- ======= ЛОГИН ======= -->
+  <div v-if="!state.authed" class="login-wrap">
+    <form class="login-card" @submit.prevent="doLogin">
+      <div class="logo">WARDOGS</div>
+      <div class="logo-sub">// панель управления</div>
+      <label>Пароль</label>
+      <input type="password" v-model.trim="state.password" :disabled="busy" autofocus />
+      <button class="btn primary" type="submit" :disabled="busy">Войти</button>
+      <div v-if="loginError" class="err">{{ loginError }}</div>
+    </form>
+  </div>
+
+  <!-- ======= ПАНЕЛЬ ======= -->
+  <div v-else class="app-wrap">
+    <header class="topbar">
+      <div class="brand"><span class="bolt">▜</span> WARDOGS PANEL</div>
+      <div class="srv-tabs">
+        <button v-for="s in state.servers" :key="s.id" class="srv-tab"
+                :class="{ active: s.id === state.sid, offline: isOffline(s.id) }"
+                @click="selectServer(s.id)">
+          <span class="dot" :class="{ on: !isOffline(s.id) }"></span>
+          <span class="srv-name">{{ s.name }}</span>
+          <span class="srv-pop" v-if="plCount(s.id) !== null">{{ plCount(s.id) }}</span>
+        </button>
+      </div>
+      <div class="top-actions">
+        <label class="live">
+          <input type="checkbox" v-model="state.live" @change="toggleLive" /> live
+        </label>
+        <button class="btn ghost" @click="refreshAll(true)" :disabled="state.refreshing">Обновить</button>
+        <button class="btn ghost" @click="logout">Выйти</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button v-for="t in tabs" :key="t.id" class="tab"
+              :class="{ active: state.tab === t.id }" @click="state.tab = t.id">{{ t.label }}</button>
+    </nav>
+
+    <main class="content">
+
+      <!-- последнее обновление -->
+      <div class="last-upd" v-if="lastUpdate">{{ lastUpdate }}</div>
+
+      <!-- ===== СТАТУС ===== -->
+      <section v-if="state.tab === 'status'">
+        <div v-if="overview && overview.error" class="panel err-box">
+          <b>Сервер недоступен.</b> {{ overview.error.message }} ({{ overview.error.code }})
+        </div>
+        <template v-else-if="ov">
+          <div class="cards">
+            <div class="card">
+              <div class="k">Сервер</div>
+              <div class="v big">{{ ov.status.serverName }}</div>
+              <div class="k">Карта</div>
+              <div class="v">{{ mapLabel(ov.status.map) }}</div>
+              <div class="k">Свет</div>
+              <div class="v">{{ lightLabel(ov.status.lighting) }}</div>
+            </div>
+            <div class="card">
+              <div class="k">Игроки</div>
+              <div class="v big">{{ ov.status.players.current }} / {{ ov.status.players.max }}</div>
+              <div class="bar"><div class="bar-fill" :style="{ width: pct(ov.status.players) + '%' }"></div></div>
+              <div class="k">{{ modeLabel(ov.status.experiences) }}</div>
+              <div class="v">{{ ov.server.build }}</div>
+            </div>
+            <div class="card">
+              <div class="k">Матч</div>
+              <div class="v big">{{ fmtClock(ov.status.matchSeconds) }}</div>
+              <div v-if="ov.status.scoreTick" class="k">Тик счёта</div>
+              <div v-if="ov.status.scoreTick" class="v">{{ ov.status.scoreTick.current }} сек</div>
+              <div v-if="ov.health" class="k">Uptime сервера</div>
+              <div v-if="ov.health" class="v">{{ fmtDur(ov.health.uptimeSeconds) }}</div>
+            </div>
+            <div class="card">
+              <div class="k">Ротация</div>
+              <div class="v" v-if="ov.rotation">{{ rotMode(ov.rotation) }} ·
+                <span v-if="ov.status.rotation">сейчас #{{ ov.status.rotation.nowIndex ?? '—' }} → #{{ ov.status.rotation.nextIndex ?? '—' }}</span>
+              </div>
+              <div class="k">Следующая карта</div>
+              <div class="v" v-if="nextEntry">{{ mapLabel(nextEntry.map) }}</div>
+              <div v-if="ov.server.connect_url" class="k"><a :href="ov.server.connect_url" target="_blank" rel="noopener">Подключиться ▶</a></div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Счёт фракций</h2>
+            <div class="factions">
+              <div v-for="f in sortedFactions" :key="f.name" class="faction-row">
+                <span class="faction-dot" :style="{ background: f.colorHex }"></span>
+                <span class="faction-name">{{ f.name }}</span>
+                <div class="bar"><div class="bar-fill" :style="{ width: pctScore(f) + '%', background: f.colorHex }"></div></div>
+                <span class="faction-score">{{ f.score }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Ротация карт</h2>
+            <div class="rot-list" v-if="ov.rotation">
+              <div v-for="(e, idx) in ov.rotation.entries" :key="e.index ?? idx"
+                   class="rot-entry" :class="[e.status ? e.status : '']">
+                <span class="rot-idx">{{ e.status ?? idx }}</span>
+                <b>{{ mapLabel(e.map) }}</b>
+                <span class="muted">{{ e.experiences.join(', ') }} · {{ lightLabel(e.lighting) }}</span>
+              </div>
+            </div>
+            <div class="muted" v-else>Ротация не отдана сервером.</div>
+          </div>
+        </template>
+        <div v-else class="panel empty">Загрузка…</div>
+      </section>
+
+      <!-- ===== ИГРОКИ ===== -->
+      <section v-if="state.tab === 'players'">
+        <div v-if="ov && ov.error" class="panel err-box"><b>Сервер недоступен.</b> {{ ov.error.message }}</div>
+        <template v-else-if="ov">
+          <div class="panel">
+            <div class="toolbar">
+              <h2>Игроки на сервере — {{ ov.players ? ov.players.count : 0 }}</h2>
+              <div class="toolbar-actions">
+                <button class="btn primary" @click="openBroadcast">📢 Объявление</button>
+              </div>
+            </div>
+            <div class="table-scroll">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th>#</th><th>Игрок</th><th>Команда</th><th class="num">K</th>
+                    <th class="num">D</th><th class="num">KD</th><th class="num">Касса</th>
+                    <th class="num">Пинг</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(p, i) in sortedPlayers" :key="p.steamId">
+                    <td>{{ i + 1 }}</td>
+                    <td><b>{{ p.name }}</b><div class="muted steam">[{{ shortSid(p.steamId) }}]</div></td>
+                    <td>
+                      <select class="faction-sel" :value="p.faction"
+                              @change="moveFaction(p, $event.target.value)">
+                        <option v-for="f in ov.status.factionScores || []" :key="f.name"
+                                :value="f.name" :disabled="f.name === p.faction">{{ f.name }}</option>
+                      </select>
+                    </td>
+                    <td class="num">{{ p.kills }}</td>
+                    <td class="num">{{ p.deaths }}</td>
+                    <td class="num">{{ kd(p) }}</td>
+                    <td class="num">{{ p.cash }}</td>
+                    <td class="num">{{ p.pingMs }}</td>
+                    <td class="row-acts">
+                      <button class="mini-btn warn" title="Сообщение" @click="sendMsg(p)">💬</button>
+                      <button class="mini-btn warn" title="Кикнуть" @click="kickPlayer(p)">✕</button>
+                      <button class="mini-btn danger" title="Убить" @click="killPlayer(p)">💀</button>
+                      <button class="mini-btn danger" title="Бан" @click="banPlayer(p)">⛔</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-if="!ov.players || !ov.players.players.length" class="muted">Сервер пуст.</div>
+          </div>
+        </template>
+        <div v-else class="panel empty">Загрузка…</div>
+      </section>
+
+      <!-- ===== КАРТА/МАТЧ ===== -->
+      <section v-if="state.tab === 'controls'">
+        <div v-if="ov && ov.error" class="panel err-box"><b>Сервер недоступен.</b> {{ ov.error.message }}</div>
+        <template v-else-if="ov">
+          <div class="grid2">
+            <div class="panel">
+              <h2>Смена карты / режима</h2>
+              <label>Карта</label>
+              <select v-model="form.map">
+                <option v-for="(m, key) in catalog.maps" :key="key" :value="key">{{ m.display }} <template v-if="ruName(key)">({{ ruName(key) }})</template></option>
+              </select>
+              <label>Режим (опционально, можно несколько)</label>
+              <div class="chips" v-if="catalog.maps && catalog.maps[form.map]">
+                <label v-for="ex in catalog.maps[form.map].experiences" :key="ex" class="chip">
+                  <input type="checkbox" :value="ex" v-model="form.experiences" /> {{ ex }}
+                </label>
+              </div>
+              <label>Свет</label>
+              <select v-model="form.lighting">
+                <option value="">— текущий —</option>
+                <option v-for="l in catalog.lightings" :key="l" :value="l">{{ lightLabel(l) }}</option>
+              </select>
+              <label>Альтернатор зоны</label>
+              <select v-model="form.zoneAlternator">
+                <option value="">— по умолчанию —</option>
+                <option v-for="a in (catalog.maps[form.map] || {}).alternators" :key="a.tag" :value="a.tag">{{ a.display }}</option>
+              </select>
+              <div class="actions">
+                <button class="btn primary" @click="changeMap" :disabled="busy">Сменить карту</button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h2>Матч</h2>
+              <div class="kv"><span>Сейчас:</span><b>{{ mapLabel(ov.status.map) }}</b></div>
+              <div class="kv"><span>Свет:</span><b>{{ lightLabel(ov.status.lighting) }}</b></div>
+              <div class="kv"><span>Время матча:</span><b>{{ fmtClock(ov.status.matchSeconds) }}</b></div>
+              <label>Сменить свет без смены карты</label>
+              <div class="chips">
+                <button v-for="l in catalog.lightings" :key="l" class="btn ghost small"
+                        :class="{ active: l === ov.status.lighting }" @click="changeLighting(l)" :disabled="busy || l === ov.status.lighting">{{ lightLabel(l) }}</button>
+              </div>
+              <div class="actions">
+                <button class="btn success" @click="endMatch" :disabled="busy">Завершить матч</button>
+                <button class="btn danger" @click="restartMatch" :disabled="busy">Перезапустить матч</button>
+              </div>
+            </div>
+          </div>
+        </template>
+        <div v-else class="panel empty">Загрузка…</div>
+      </section>
+
+      <!-- ===== БАНЫ ===== -->
+      <section v-if="state.tab === 'bans'">
+        <div class="panel">
+          <div class="toolbar">
+            <h2>Баны — {{ ov && ov.bans_count != null ? ov.bans_count : (ov && ov.bans ? ov.bans.count : 0) }}</h2>
+            <button class="btn primary" @click="openAddBan">+ Добавить бан</button>
+          </div>
+          <div class="table-scroll">
+            <table class="tbl">
+              <thead><tr><th>Steam64</th><th>Причина</th><th>Кем</th><th>Когда</th><th></th></tr></thead>
+              <tbody v-if="ov && ov.bans">
+                <tr v-for="b in ov.bans.bans || []" :key="b.steamId">
+                  <td>{{ b.steamId }}</td>
+                  <td>{{ b.reason || '—' }}</td>
+                  <td>{{ b.bannedBy || '—' }}</td>
+                  <td>{{ fmtDate(b.bannedAtUtc) }}</td>
+                  <td><button class="mini-btn danger" @click="unban(b)">Снять</button></td>
+                </tr>
+                <tr v-if="!ov.bans.bans || !ov.bans.bans.length"><td colspan="5" class="muted">Бан-лист пуст.</td></tr>
+              </tbody>
+              <tbody v-else><tr><td colspan="5" class="muted">Загрузка…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== АУДИТ ===== -->
+      <section v-if="state.tab === 'audit'">
+        <div class="panel">
+          <div class="toolbar">
+            <h2>Аудит действий админов</h2>
+            <label>Строк: <select v-model="auditLimit" @change="loadAudit"><option v-for="n in [20,50,100,200]" :key="n" :value="n">{{ n }}</option></select></label>
+          </div>
+          <div class="table-scroll">
+            <table class="tbl">
+              <thead><tr><th>Время</th><th>Событие</th><th>Peer</th><th>Детали</th></tr></thead>
+              <tbody>
+                <tr v-for="(e, i) in audit" :key="i">
+                  <td class="mono">{{ fmtDate(e.timestampUtc) }}</td>
+                  <td><span class="evt">{{ e.event }}</span></td>
+                  <td class="mono">{{ e.peer || '—' }}</td>
+                  <td class="mono">{{ e.detail || '' }}</td>
+                </tr>
+                <tr v-if="!audit.length"><td colspan="4" class="muted">История пуста.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== КОНФИГ ===== -->
+      <section v-if="state.tab === 'config'">
+        <div class="panel">
+          <div class="toolbar">
+            <h2>Конфиг сервера <span class="muted">(ServerSettings.ini)</span></h2>
+            <div class="toolbar-actions">
+              <button class="btn ghost" @click="loadConfig" :disabled="busy">Обновить</button>
+              <button class="btn warn" @click="validateConfig" :disabled="busy || !cfgLoaded">Проверить</button>
+              <button class="btn danger" @click="applyConfig" :disabled="busy || !cfgLoaded">Применить</button>
+            </div>
+          </div>
+          <div v-if="!cfg.writable" class="err-box">Сервер не разрешает запись конфига (config.writable = false).</div>
+          <div v-if="cfg.revision" class="muted">Ревизия: <span class="mono">{{ cfg.revision }}</span></div>
+          <div v-if="cfg.warnings && cfg.warnings.length" class="warn-box">
+            <b>Предупреждения сервера:</b>
+            <div v-for="(w, i) in cfg.warnings" :key="i" class="mono">{{ w }}</div>
+          </div>
+          <textarea class="cfg-text" v-model="cfg.text" rows="20" spellcheck="false"
+                    :disabled="!cfg.writable" placeholder="Загрузка конфига…"></textarea>
+          <div v-if="cfgResult" class="result monospace" :class="cfgResultStatus">
+            <div v-if="cfgResult.error" class="err">{{ cfgResult.error.code }}: {{ cfgResult.error.message }}</div>
+            <div v-if="cfgResult.errors && cfgResult.errors.length"><b>Ошибки:</b>
+              <div v-for="(e, i) in cfgResult.errors" :key="i">{{ e.section }} › {{ e.key }}: {{ e.message }} ({{ e.code }})</div>
+            </div>
+            <div v-if="cfgResult.changed && cfgResult.changed.length"><b>Изменено:</b>
+              <div v-for="(c, i) in cfgResult.changed" :key="i">{{ c.section }}: +{{ c.added }} −{{ c.removed }} {{ JSON.stringify(c.keys) }}</div>
+            </div>
+            <div v-if="cfgResult.status >= 400 && !cfgResult.changed" class="muted">HTTP {{ cfgResult.status }}</div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div v-if="toasts.length" class="toasts">
+    <div v-for="(t, i) in toasts" :key="i" class="toast" :class="t.kind">{{ t.text }}</div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script>
+window.PANEL_BOOT = { token: "__PANEL_TOKEN__", needLogin: "__PANEL_LOGIN__" === "true", refresh: __PANEL_REFRESH__ };
+</script>
+<script src="app.js"></script>
+</body>
+</html>

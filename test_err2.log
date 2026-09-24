@@ -1,0 +1,6 @@
+2026-09-13 19:46:27,094 WARNING discord.client: davey is not installed, voice will NOT be supported
+2026-09-13 19:46:27,099 WARNING discord.ext.commands.bot: Privileged message content intent is missing, commands may not work as expected.
+2026-09-13 19:46:27,101 INFO discord.client: logging in using static token
+2026-09-13 19:46:29,321 INFO discord.gateway: Shard ID None has connected to Gateway (Session ID: 6ae5c2e86c91b1795fa3402fb2a33a09).
+2026-09-13 19:46:31,440 INFO wardogs: Wardogs: опрос http://51.83.166.12:7799, присутствие каждые 60 с, сводка в канал 1548735147531313212 каждые 5 мин
+2026-09-13 19:46:31,714 INFO main: Wardogs-monitor готов к работе.
