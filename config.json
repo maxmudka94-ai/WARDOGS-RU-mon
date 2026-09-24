@@ -20,9 +20,39 @@
   },
   "rcon": {
     "scheme": "http",
-    "host": "51.83.166.12",
-    "port": 7799,
-    "token": "rconadmin791745163152",
+    "host": "54.38.128.147",
+    "port": 7839,
+    "token": "hbuyu66dfytiyuiyrxsryyr",
     "timeout": 45
-  }
+  },
+  "panel": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 8200,
+    "password": "",
+    "public_url": "",
+    "refresh_seconds": 5
+  },
+  "servers": [
+    {
+      "id": "ru1",
+      "name": "WARDOGS RU #1",
+      "scheme": "http",
+      "host": "54.38.128.147",
+      "port": 7839,
+      "token": "hbuyu66dfytiyuiyrxsryyr",
+      "timeout": 45,
+      "connect_url": ""
+    },
+    {
+      "id": "ru2",
+      "name": "WARDOGS RU #2 (второй — заполни ниже)",
+      "scheme": "http",
+      "host": "127.0.0.1",
+      "port": 7799,
+      "token": "",
+      "timeout": 45,
+      "connect_url": ""
+    }
+  ]
 }

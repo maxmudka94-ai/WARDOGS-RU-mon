@@ -39,7 +39,11 @@ class WardogsRCON:
 
     async def _get_session(self):
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession(timeout=self.timeout)
+            # Игровой сервер некорректно держит keep-alive: повторный запрос
+            # по тому же соединению висит ~20с. Новое соединение на каждый
+            # запрос (Connection: close) — надёжнее.
+            connector = aiohttp.TCPConnector(limit=16, force_close=True)
+            self._session = aiohttp.ClientSession(timeout=self.timeout, connector=connector)
         return self._session
 
     async def get(self, api_path, params=None):
@@ -102,11 +106,50 @@ class WardogsRCON:
             )
         return data
 
+    async def request_raw(self, method, api_path, json_body=None, raw_body=None,
+                          content_type="application/json", params=None, extra_headers=None):
+        """Как request(), но не кидает RCONError при 4xx/5xx.
+
+        Нужно для PUT/POST /v1/config: там 412 (устаревшая ревизия) и 422
+        (значение отклонено) — это результаты проверки, а не ошибки связи.
+        Возвращает (status, data).
+        """
+        url = f"{self.base_url}{api_path}"
+        session = await self._get_session()
+        headers = self._headers()
+        if extra_headers:
+            headers.update(extra_headers)
+        data = None
+        if raw_body is not None:
+            data = raw_body
+            headers["Content-Type"] = content_type
+        status = 0
+        try:
+            async with session.request(method, url, headers=headers, json=json_body,
+                                       data=data, params=params) as resp:
+                status = resp.status
+                text = await resp.text()
+        except asyncio.TimeoutError as e:
+            raise RCONError(0, "timeout", f"сервер не ответил за {self.timeout.total}s") from e
+        except (aiohttp.ClientError, OSError) as e:
+            raise RCONError(0, "network", str(e)) from e
+        try:
+            data = json.loads(text) if text.strip() else {}
+        except Exception:
+            data = text
+        return status, data
+
     async def status(self):
         return await self.get("/v1/status")
 
     async def players(self):
         return await self.get("/v1/players")
+
+    async def rotation(self):
+        return await self.get("/v1/rotation")
+
+    async def bans(self):
+        return await self.get("/v1/bans")
 
     async def capabilities(self):
         return await self.get("/v1/capabilities")

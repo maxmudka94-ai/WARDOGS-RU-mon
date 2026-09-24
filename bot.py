@@ -70,6 +70,10 @@ async def main():
     async with bot:
         await bot.add_cog(Wardogs(bot))
         await bot.add_cog(MatchStats(bot))
+        if config.PANEL_ENABLED:
+            import webpanel
+
+            await webpanel.start(bot)
         await bot.start(TOKEN)
 
 
