@@ -7,7 +7,7 @@ from logging.handlers import RotatingFileHandler
 import discord
 from discord.ext import commands
 
-from config import CONFIG, GUILD_ID, PROXY_URL, TOKEN
+from config import CONFIG, GUILD_ID, PROXY_URL, TOKEN, PANEL_ENABLED
 from cogs.wardogs import Wardogs
 from cogs.matchstats import MatchStats
 
@@ -70,7 +70,7 @@ async def main():
     async with bot:
         await bot.add_cog(Wardogs(bot))
         await bot.add_cog(MatchStats(bot))
-        if config.PANEL_ENABLED:
+        if PANEL_ENABLED:
             import webpanel
 
             await webpanel.start(bot)

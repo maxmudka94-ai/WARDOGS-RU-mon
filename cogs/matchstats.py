@@ -13,6 +13,7 @@ from rcon_client import RCONError, WardogsRCON
 log = logging.getLogger("matchstats")
 
 MATCH_COLOR = 0x2EA2CC
+PLACEHOLDER_TITLE = "📊 Итоги матча"
 
 
 def _short(text, limit=20):
@@ -268,29 +269,33 @@ class MatchStats(commands.Cog):
                 log.warning("Канал итогов матча %s не найден (заглушка)", self.channel_id)
                 return
         embed = discord.Embed(
-            title="📊 Итоги матча",
+            title=PLACEHOLDER_TITLE,
             description="Ожидание завершения матча — сюда придёт финальная статистика.",
             color=MATCH_COLOR,
         )
         embed.set_footer(text="Итоги матча · wardogs-monitor")
         message_id = self._message_id
-        if not message_id:
+        if message_id:
             try:
-                await channel.send(embed=embed)
+                msg = await channel.fetch_message(message_id)
+            except discord.NotFound:
+                self._message_id = None
             except Exception:
-                log.exception("Не удалось создать эмбед-заглушку итогов матча")
-            return
+                log.exception("Ошибка чтения эмбеда итогов матча — попробую пересоздать")
+            else:
+                # итоги уже выложенного матча не затираем заглушкой
+                if msg.embeds and msg.embeds[0].title != PLACEHOLDER_TITLE:
+                    log.info("Итоги прошлого матча на месте — оставляю как есть")
+                    return
+                await msg.edit(embed=embed)
+                return
         try:
-            msg = await channel.fetch_message(message_id)
-            await msg.edit(embed=embed)
-        except discord.NotFound:
-            self._message_id = None
-            try:
-                await channel.send(embed=embed)
-            except Exception:
-                log.exception("Не удалось пересоздать эмбед-заглушку итогов матча")
+            msg = await channel.send(embed=embed)
         except Exception:
-            log.exception("Ошибка редактирования заглушки итогов матча")
+            log.exception("Не удалось создать эмбед-заглушку итогов матча")
+            return
+        self._message_id = msg.id
+        self._save_message_id(msg.id)
 
     # ---------- жизненный цикл ----------
 
